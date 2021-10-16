@@ -88,6 +88,13 @@ RUN pip-sync /requirements.txt.lock
 ARG CUSTOM_PIP=ipython
 RUN pip install ${CUSTOM_PIP}
 
+# Install ARGUS GLUE Service
+ARG ARGUS_PIP=pre-commit
+RUN pip3 install ${ARGUS_PIP}
+RUN pre-commit install
+RUN python3 nav-argus-glue/setup.py install
+
+
 ADD tools/docker/full-nav-restore.sh /usr/local/sbin/full-nav-restore.sh
 
 VOLUME ["/source"]
