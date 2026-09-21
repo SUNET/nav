@@ -15,8 +15,7 @@
 #
 """Pydantic models for authentication configuration.
 
-Replaces the TOMLConfigParser-based parsers for reading
-``webfront/authentication.toml``.
+Reads and validates ``webfront/authentication.toml``.
 """
 
 import logging
@@ -166,6 +165,7 @@ class OIDCProviderEntry(BaseModel):
     client_id: str
     secret: str
     server_url: str
+    scope: list[str] = []
     settings: OIDCProviderSettings = OIDCProviderSettings()
 
 
@@ -188,6 +188,10 @@ class OIDCConfig(BaseModel):
             }
             # Pass through any extra provider-specific settings
             settings.update(entry.settings.model_extra)
+            # Entry-level scope (the documented level) wins over any scope
+            # smuggled in through the settings passthrough above.
+            if entry.scope:
+                settings["scope"] = entry.scope
 
             app: dict[str, Any] = {
                 "provider_id": provider_id,

@@ -3,6 +3,16 @@ from unittest import TestCase
 
 from nav.config import _config_resource_walk, find_config_file, get_config_locations
 
+from .ascii_locale import assert_runs_in_ascii_locale
+
+_READ_UTF8_CONFIG_SCRIPT = """
+from nav.config import NAVConfigParser
+
+parser = NAVConfigParser(default_config="", default_config_files=("utf8.conf",))
+expected = "a" + chr(0x2014) + "b"
+assert parser.get("section", "key") == expected, parser.get("section", "key")
+"""
+
 
 class TestConfigResourceWalk(TestCase):
     def test_should_read_relative_paths_as_strings_from_nav_package_and_return_a_long_list_of_strings(  # noqa: E501
@@ -113,3 +123,19 @@ class TestNavConfigDir:
 
         found_path = find_config_file("nonexistent.conf")
         assert found_path is None
+
+
+class TestConfigFileEncoding:
+    """#4132: config files must be read as UTF-8 regardless of the locale's
+    preferred encoding.
+    """
+
+    def test_when_locale_encoding_is_not_utf8_then_navconfigparser_should_still_read_utf8_files(  # noqa: E501
+        self, tmp_path
+    ):
+        config_file = tmp_path / "utf8.conf"
+        config_file.write_text("[section]\nkey = a—b\n", encoding="utf-8")
+
+        assert_runs_in_ascii_locale(
+            _READ_UTF8_CONFIG_SCRIPT, NAV_CONFIG_DIR=str(tmp_path)
+        )

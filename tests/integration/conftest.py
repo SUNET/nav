@@ -59,7 +59,6 @@ TESTARGS_PATTERN = re.compile(
     r'^# +-\*-\s*testargs:\s*(?P<args>.*?)\s*(-\*-)?\s*$', re.MULTILINE
 )
 NOTEST_PATTERN = re.compile(r'^# +-\*-\s*notest\s*(-\*-)?\s*$', re.MULTILINE)
-BINDIR = './python/nav/bin'
 
 
 def pytest_generate_tests(metafunc):
@@ -91,14 +90,23 @@ def _nav_script_tests():
 
 
 def _nav_scripts_map() -> dict[str, str]:
-    """Returns a map of installable script names to NAV module names from
-    pyproject.toml.
+    """Returns a map of installable script names to the NAV module that
+    actually implements each one.
+
+    Most Django-dependent scripts are installed via nav.cli_dispatch, which
+    bootstraps Django and then dispatches to the real implementation based
+    on the "nav.cli_commands" entry-point group - so for those, that group
+    is where the real module lives, not project.scripts.
     """
     data = toml.load('pyproject.toml')
     scripts: dict[str, str] = data.get('project', {}).get('scripts', {})
+    cli_commands: dict[str, str] = (
+        data.get('project', {}).get('entry-points', {}).get('nav.cli_commands', {})
+    )
+    modules = {**scripts, **cli_commands}
     return {
         script: module.split(':', maxsplit=1)[0]
-        for script, module in scripts.items()
+        for script, module in modules.items()
         if module.startswith('nav.')
     }
 
@@ -353,13 +361,17 @@ def _build_snmpsim_command(workspace):
     ]
 
     if which('uvx') and _uv_has_python('3.11'):
-        snmpsim_pkg = _get_installed_snmpsim_spec()
-        return [
-            'uvx',
-            '--python=3.11',
-            f'--from={snmpsim_pkg}',
-            'snmpsim-command-responder',
-        ] + snmpsim_args
+        return (
+            [
+                'uvx',
+                '--python=3.11',
+                f'--with={_get_installed_spec("cryptography")}',  # snmpsim uses pysnmp which uses cryptography, but only declares it as dev dependency # noqa: E501
+                f'--with={_get_installed_spec("pysmi")}',  # imported by snmpsim.utils, not pulled in by pysnmp # noqa: E501
+                f'--from={_get_installed_spec("snmpsim")}',
+                'snmpsim-command-responder',
+            ]
+            + snmpsim_args
+        )
 
     snmpsimd = which('snmpsim-command-responder')
     if not snmpsimd:
@@ -391,16 +403,16 @@ def _uv_has_python(version):
     return result.returncode == 0
 
 
-def _get_installed_snmpsim_spec():
-    """Returns a pip specifier for the locally installed snmpsim version.
+def _get_installed_spec(package_name: str):
+    """Returns a pip specifier for the locally installed version.
 
-    Falls back to an unpinned 'snmpsim' if the package is not installed.
+    Falls back to an unpinned version if the package is not installed.
     """
     try:
-        version = importlib.metadata.version('snmpsim')
-        return f'snmpsim=={version}'
+        version = importlib.metadata.version(package_name)
+        return f'{package_name}=={version}'
     except importlib.metadata.PackageNotFoundError:
-        return 'snmpsim'
+        return package_name
 
 
 @pytest.fixture()

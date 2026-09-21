@@ -24,10 +24,7 @@ import configparser
 
 import argparse
 
-from nav.bootstrap import bootstrap_django
 from nav.config import find_config_file
-
-bootstrap_django(__file__)
 
 import nav
 import nav.mailin
@@ -50,7 +47,7 @@ def main():
 
     # Todo: fail if config file is not found
     conf = configparser.ConfigParser()
-    conf.read(find_config_file(CONFIG_FILE))
+    conf.read(find_config_file(CONFIG_FILE), encoding='utf-8')
 
     # Must do this after config, so logfile can be configurable
     if args.test:
